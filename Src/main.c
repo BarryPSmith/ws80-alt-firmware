@@ -19,6 +19,9 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "usb_device.h"
+#include "wind.h"
+#include "temperature.h"
+#include <stdbool.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -122,7 +125,9 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-
+    process_wind();
+    ProcessTemperature();
+    stop_until_event(true);
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -313,7 +318,7 @@ static void MX_RTC_Init(void)
 
   RTC_TimeTypeDef sTime = {0};
   RTC_DateTypeDef sDate = {0};
-  RTC_AlarmTypeDef sAlarm = {0};
+  //RTC_AlarmTypeDef sAlarm = {0};
 
   /* USER CODE BEGIN RTC_Init 1 */
 

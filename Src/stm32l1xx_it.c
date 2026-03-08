@@ -46,7 +46,8 @@
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN PFP */
-
+void timer9_tick();
+void dma1_channel1_irq();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -221,7 +222,7 @@ void RTC_WKUP_IRQHandler(void)
 void DMA1_Channel1_IRQHandler(void)
 {
   /* USER CODE BEGIN DMA1_Channel1_IRQn 0 */
-
+  dma1_channel1_irq();
   /* USER CODE END DMA1_Channel1_IRQn 0 */
   HAL_DMA_IRQHandler(&hdma_adc);
   /* USER CODE BEGIN DMA1_Channel1_IRQn 1 */
@@ -249,7 +250,7 @@ void USB_LP_IRQHandler(void)
 void TIM9_IRQHandler(void)
 {
   /* USER CODE BEGIN TIM9_IRQn 0 */
-
+  timer9_tick();
   /* USER CODE END TIM9_IRQn 0 */
   HAL_TIM_IRQHandler(&htim9);
   /* USER CODE BEGIN TIM9_IRQn 1 */

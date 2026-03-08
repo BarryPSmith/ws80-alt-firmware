@@ -14,7 +14,7 @@ static volatile bool s_dma_complete;
 static uint8_t s_ringCount;
 static volatile uint8_t s_tim9Ticks;
 static uint16_t s_togglePins, s_togglePin0;
-static volatile uint32_t toggleODR;
+static volatile uint32_t* s_toggleODR;
 static GPIO_TypeDef* s_toggleGpio;
 
 uint8_t LoadRingCount(transducer_t transmitter, transducer_t receiver);
@@ -62,6 +62,10 @@ void prepareToMeasureWind(uint8_t channel, uint8_t direction)
 
 void measureWind()
 {
+    // Wait to ensure the internal reference voltage is ready
+    // (We might turn it off during some sleeps).
+    while ((PWR->CSR & PWR_CSR_VREFINTRDYF) == 0)
+    {}
     s_dma_complete = false;
     // Enabling timer 9 also enables timer 2.
     // Timer 9 will ring the transmitter using its interrupt
@@ -73,7 +77,7 @@ void measureWind()
     {
         // Nothing to do while our interrupts, timers, and DMA handle the measurement.
         // We stay in full power for the ADC, &c, but shut down the core to reduce consumption.
-        __WFI();
+        __WFE();
     }
 }
 
@@ -91,7 +95,7 @@ void setupOutChannel(transducer_t transmitter)
 {
     s_togglePins = (1 << s_transducerPins[transmitter][0]) | (1 << s_transducerPins[transmitter][1]);
     s_toggleGpio = s_transducerGPIOs[transmitter];
-    toggleODR = &s_toggleGpio->ODR;
+    s_toggleODR = &s_toggleGpio->ODR;
     s_togglePin0 = 1 << s_transducerPins[transmitter][0];
 }
 
@@ -126,9 +130,9 @@ void setupInChannel(transducer_t receiver)
 
 void updatePhysicalParamters()
 {
-    const uint32_t min_power;
-    const uint32_t barrier_power;
-    const uint32_t max_power;
+    const uint32_t min_power = 25000;
+    const uint32_t barrier_power = 45000;
+    const uint32_t max_power = 90000;
     const uint8_t minRings = 2;
     const uint8_t maxRings = 12;
     for (int channel = 0; channel < 6; channel++)
@@ -146,4 +150,31 @@ void updatePhysicalParamters()
                 g_windRingCounts[channel] < maxRings)
             g_windRingCounts[channel]++;
     }
+}
+
+void timer9_tick()
+{
+    if (s_tim9Ticks == 0)
+    *s_toggleODR |= s_togglePin0;
+    else
+        *s_toggleODR ^= s_togglePins;
+
+    if (s_tim9Ticks > s_ringCount)
+        return;
+
+    if (s_tim9Ticks == s_ringCount)
+    {
+        // Turn off both toggle pins
+        *s_toggleODR &= ~s_togglePins;
+        // Turn off our timer
+        TIM9->CR1 &= ~TIM_CR1_CEN;
+    }
+
+    s_tim9Ticks++;
+}
+
+
+void dma1_channel1_irq()
+{
+    s_dma_complete = true;
 }

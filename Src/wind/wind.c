@@ -12,15 +12,19 @@ static uint32_t s_last_wind_sample;
 const uint32_t wind_sample_rate = 1;
 const uint8_t max_volume = 12;
 
+void sample_wind();
+
 void process_wind()
 {
-    if (g_rtcTicks - s_last_wind_sample < wind_sample_rate)
+    uint32_t rtcTicksLocal = g_rtcTicks;
+    if (rtcTicksLocal - s_last_wind_sample < wind_sample_rate)
     {
+        s_last_wind_sample = rtcTicksLocal;
         sample_wind();
     }
 }
 
-uint8_t g_channel_transducers[6][2] =
+const uint8_t g_channel_transducers[6][2] =
 { { 0, 1 },
   { 0, 2 },
   { 0, 3 },
@@ -34,7 +38,7 @@ uint8_t g_channel_transducers[6][2] =
 uint8_t g_windRingCounts[6];
 uint32_t g_signalPowers[6][2];
 
-void sample_Wind()
+void sample_wind()
 {
     for (uint8_t dir = 0; dir < 2; dir++)
     {
