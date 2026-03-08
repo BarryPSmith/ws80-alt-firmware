@@ -5,9 +5,10 @@
 #include <stdbool.h>
 #include "stm32l1xx_hal_pwr.h"
 
-uint32_t rtc_ticks = 0;
-
 extern RTC_HandleTypeDef hrtc;
+
+uint32_t g_rtcTicks = 0;
+volatile bool g_canStop = true;
 
 // Technically not millis, since it's 1024 ticks per second not 1000.
 uint32_t millis32()
@@ -35,13 +36,13 @@ uint32_t millis32()
     return currentTime * 1024 + rtcTime.SubSeconds;
 }
 
-uint32_t alarmMillis;
-volatile bool _alarmSignalled;
+static uint32_t s_alarmMillis;
+static volatile bool s_alarmSignalled;
 void set_alarm(uint16_t millisFromNow)
 {
     uint32_t curMillis = millis32();
-    alarmMillis = curMillis + millisFromNow;
-    uint32_t alarmSeconds = alarmMillis / 1024;
+    s_alarmMillis = curMillis + millisFromNow;
+    uint32_t alarmSeconds = s_alarmMillis / 1024;
     //struct tm* tim = localtime(&alarmSeconds);
     RTC_AlarmTypeDef rtcAlarm = {0};
     /*RTC_TimeTypeDef rtcTime;
@@ -54,20 +55,61 @@ void set_alarm(uint16_t millisFromNow)
     rtcAlarm.AlarmTime.Minutes = tim->tm_min;
     */
     rtcAlarm.AlarmTime.Seconds = alarmSeconds % 60;
-    rtcAlarm.AlarmTime.SubSeconds = alarmMillis % 1024;
-    rtcAlarm.AlarmMask = RTC_ALARMMASK_SECONDS;
-    rtcAlarm.AlarmSubSecondMask = RTC_ALARMSUBSECONDMASK_ALL;
+    rtcAlarm.AlarmTime.SubSeconds = s_alarmMillis % 1024;
+    rtcAlarm.AlarmMask = RTC_ALARMMASK_ALL & ~RTC_ALARMMASK_SECONDS;
+    rtcAlarm.AlarmSubSecondMask = RTC_ALARMSUBSECONDMASK_SS14_10;
     rtcAlarm.Alarm = RTC_CR_ALRAE;
-    _alarmSignalled = false;
+    
+    s_alarmSignalled = false;
     HAL_RTC_SetAlarm_IT(&hrtc, &rtcAlarm, RTC_FORMAT_BIN);
+}
+
+void stop_until_event(bool returnToHSE)
+{
+    
+    uint32_t old_rcc_cfgr;
+    if (returnToHSE)
+        old_rcc_cfgr = RCC->CFGR;
+    // We are using our own sleep code here rather than the HAL.
+    // I don't like the __SEV(); __WFE(); __WFE() present in the HAL,
+    // I think it is subject to a race condition.
+    // Several online discussions about this.
+    if (g_canStop)
+    {
+        /* Select the regulator state in Stop mode: Set PDDS and LPSDSR bit according to PWR_Regulator value */
+        MODIFY_REG(PWR->CR, (PWR_CR_PDDS | PWR_CR_LPSDSR), PWR_LOWPOWERREGULATOR_ON);
+        /* Set SLEEPDEEP bit of Cortex System Control Register */
+        SET_BIT(SCB->SCR, ((uint32_t)SCB_SCR_SLEEPDEEP_Msk));
+        // Wait for an event.
+        __WFE();
+        // Clear the bit that may have just been set:
+        __SEV();
+        __WFE();
+        /* Reset SLEEPDEEP bit of Cortex System Control Register */
+        CLEAR_BIT(SCB->SCR, ((uint32_t)SCB_SCR_SLEEPDEEP_Msk));
+        // Reset the LPSDSR so next time we sleep we don't go into low power sleep. 
+        // Some other sleeps - like in our measurement loop - cannot afford the regulator latency,
+        // also I don't think the ADC would work at full speed in low power sleep?
+        MODIFY_REG(PWR->CR, (PWR_CR_LPSDSR), 0);
+    }
+    else
+        __WFE();
+
+    if (returnToHSE)
+    {
+        RCC->CR |= RCC_CR_HSEON;
+        while (!(RCC->CR & RCC_CR_HSERDY));
+        RCC->CFGR = old_rcc_cfgr;
+    }
 }
 
 void wait_until_alarm_stopped()
 {
     uint32_t old_rcc_cfgr = RCC->CFGR;
-    while (!_alarmSignalled)
+    
+    while (!s_alarmSignalled)
     {
-        HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON, PWR_STOPENTRY_WFI);
+        stop_until_event(false);
     }
     // STOP mode changed us to MSI instead of HSE. change it back:
     RCC->CR |= RCC_CR_HSEON;
@@ -85,10 +127,10 @@ void delay_stopped(uint16_t delay)
 
 void HAL_RTC_AlarmAEventCallback(RTC_HandleTypeDef *hrtc)
 {
-    _alarmSignalled = true;
+    s_alarmSignalled = true;
 }
 
 void HAL_RTCEx_WakeUpTimerEventCallback(RTC_HandleTypeDef *hrtc)
 {
-    rtc_ticks++;
+    g_rtcTicks++;
 }
