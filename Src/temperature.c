@@ -9,6 +9,8 @@
 #include <stdbool.h>
 
 #include "stm32l1xx.h"
+#include "my_time.h"
+#include "temperature.h"
 
 #define HAL_I2C
 #ifdef HAL_I2C
@@ -19,14 +21,13 @@
 
 
 #ifdef DEBUG_TEMP
-#include "usbd_cdc_if.h"
-#include <stdio.h>
+#include "debug.h"
 #endif
 
 enum TempSensorEnum { TS_Missing, SHT3x, SHT4x, HTU21C };
 enum TempSensorEnum tempSensorType;
 
-const uint16_t tempMeasurementInterval = 1000;
+const uint16_t tempMeasurementInterval = 10000;
 const uint16_t tempSensorDelay = 100;
 uint32_t lastTempMeasurementTicks = 0;
 int16_t lastTempMeasurement = 0;
@@ -35,31 +36,25 @@ enum TempSensorState { TS_Idle, TS_Acquiring };
 enum TempSensorState tempSensorState = TS_Idle;
 
 #ifdef HAL_I2C
-I2C_HandleTypeDef I2cHandle;
+extern I2C_HandleTypeDef hi2c1;
 
 bool I2CReadFromAddress(uint8_t address, uint8_t* buffer, uint8_t len)
 {
-    HAL_StatusTypeDef err = HAL_I2C_Master_Receive(&I2cHandle,
+    HAL_StatusTypeDef err = HAL_I2C_Master_Receive(&hi2c1,
         address, buffer, len, 100);
     #ifdef DEBUG_TEMP
-    char buff[60];
-    uint8_t lenDbg = snprintf(buff, sizeof(buff),
-        "I2C_Master_Receive to 0x%02x returned %d - %08lx\r\n", address, err, I2cHandle.ErrorCode);
-    CDC_Transmit_FS((uint8_t*)buff, lenDbg);
-    HAL_Delay(2);
+    debug_print("I2C_Master_Receive after I2C State: 0x%02x\r\n", hi2c1.State);
+    debug_print("I2C_Master_Receive to 0x%02x returned %d - %08lx\r\n", address, err, hi2c1.ErrorCode);
     #endif
     return err == HAL_OK;
 }
 bool I2CWriteToAddress(uint8_t address, uint8_t* buffer, uint8_t len)
 {
-    HAL_StatusTypeDef err = HAL_I2C_Master_Transmit(&I2cHandle,
+    HAL_StatusTypeDef err = HAL_I2C_Master_Transmit(&hi2c1,
         address, buffer, len, 100);
     #ifdef DEBUG_TEMP
-    char buff[60];
-    uint8_t lenDbg = snprintf(buff, sizeof(buff),
-        "I2C_Master_Write to 0x%02x returned %d - %08lx\r\n", address, err, I2cHandle.ErrorCode);
-    CDC_Transmit_FS((uint8_t*)buff, lenDbg);
-    HAL_Delay(2);
+    debug_print("I2C_Master_Write after I2C State: 0x%02x\r\n", hi2c1.State);
+    debug_print("I2C_Master_Write to 0x%02x returned %d - %08lx\r\n", address, err, hi2c1.ErrorCode);
     #endif
     return err == HAL_OK;
 }
@@ -99,7 +94,7 @@ void InitTemperature()
 
 void ProcessTemperature()
 {
-    uint32_t ticks = HAL_GetTick();
+    uint32_t ticks = millis32();
     switch (tempSensorState)
     {
         case TS_Idle:
@@ -108,9 +103,7 @@ void ProcessTemperature()
                 if (!WakeUpTempSensor())
                 {
                     #ifdef DEBUG_TEMP
-                    char buff[] = "Failed to begin measurement.\r\n";
-                    CDC_Transmit_FS((uint8_t*)buff, sizeof(buff));
-                    HAL_Delay(2);
+                    debug_print("Failed to begin measurement.\r\n");
                     #endif
                 }
                 tempSensorState = TS_Acquiring;
@@ -123,9 +116,7 @@ void ProcessTemperature()
                 if (!GetTemperature(&lastTempMeasurement, &lastHumidityMeasurement))
                 {
                     #ifdef DEBUG_TEMP
-                    char buff[] = "Failed to get temperature.\r\n";
-                    CDC_Transmit_FS((uint8_t*)buff, sizeof(buff));
-                    HAL_Delay(2);
+                    debug_print("Failed to get temperature.\r\n");
                     #endif
                 }
                 tempSensorState = TS_Idle;
@@ -184,7 +175,7 @@ bool GetTemperature(int16_t *temperature, uint16_t *humidity)
         uint8_t cmd3 = 0xF3; // Trigger temperature measurement HTU21D
         if (!I2CWriteToAddress(address, &cmd3, 1))
             return false;
-        HAL_Delay(20);
+        delay_stopped(20);
         if (!I2CReadFromAddress(address, buffer + 3, 3))
             return false;
     }
@@ -202,16 +193,10 @@ bool GetTemperature(int16_t *temperature, uint16_t *humidity)
         humidityRaw = ((uint16_t)buffer[3] << 8) + buffer[4];
     }
     #ifdef DEBUG_TEMP
-    char dbgBuffer[30];
-    uint8_t len = snprintf (dbgBuffer, sizeof(dbgBuffer),
+    debug_print(
         "buf: %02x %02x %02x %02x %02x %02x\r\n",
         buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5]);
-    CDC_Transmit_FS((uint8_t*)dbgBuffer, len);
-    HAL_Delay(1);
-    len = snprintf(dbgBuffer, sizeof(dbgBuffer),
-        "tempRaw: %d\r\n", tempRaw);
-    CDC_Transmit_FS((uint8_t*)dbgBuffer, len);
-    HAL_Delay(2);
+    debug_print("tempRaw: %d\r\n", tempRaw);
     #endif
     if (tempRaw == 0 || tempRaw == 0xFFFF)
     {
@@ -236,14 +221,8 @@ bool GetTemperature(int16_t *temperature, uint16_t *humidity)
     *humidity = tempHumidity;
     *temperature = tempPlus400 - 400;
     #ifdef DEBUG_TEMP
-    len = snprintf(dbgBuffer, sizeof(dbgBuffer),
-        "temp: %d\r\n", *temperature);
-    CDC_Transmit_FS((uint8_t*)dbgBuffer, len);
-    HAL_Delay(2);
-    len = snprintf(dbgBuffer, sizeof(dbgBuffer),
-        "humidity: %d\r\n", *humidity);
-    CDC_Transmit_FS((uint8_t*)dbgBuffer, len);
-    HAL_Delay(2);
+    debug_print("temp: %d\r\n", *temperature);
+    debug_print("humidity: %d\r\n", *humidity);
     #endif
     return true;
 }
@@ -256,11 +235,7 @@ bool WakeUpTempSensor()
     }
 
     #ifdef DEBUG_TEMP
-    char buffer[30];
-    uint8_t len = snprintf(buffer, sizeof(buffer),
-        "B4 wakeup Sensor Type: %d\r\n", tempSensorType);
-    CDC_Transmit_FS((uint8_t*)buffer, len);
-    HAL_Delay(2);
+    debug_print("B4 wakeup Sensor Type: %d\r\n", tempSensorType);
     #endif
 
     switch (tempSensorType)
@@ -286,9 +261,7 @@ bool WakeUpTempSensor()
 void DetermineTempSensor()
 {
     #ifdef DEBUG_TEMP
-    char data[] = "Determining Sensor\r\n";
-    CDC_Transmit_FS((uint8_t*)data, sizeof(data));
-    HAL_Delay(2);
+    debug_print("Determining Sensor\r\n");
     #endif
 
     tempSensorType = TS_Missing;
@@ -306,11 +279,7 @@ void DetermineTempSensor()
 
         
     #ifdef DEBUG_TEMP
-    char buffer[23];
-    uint8_t len = snprintf(buffer, sizeof(buffer),
-        "DTS Sensor Type: %d\r\n", tempSensorType);
-    CDC_Transmit_FS((uint8_t*)buffer, len);
-    HAL_Delay(2);
+    debug_print("DTS Sensor Type: %d\r\n", tempSensorType);
     #endif
 }
 

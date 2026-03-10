@@ -7,7 +7,10 @@
 
 #include "wind.h"
 #include "stm32l1xx_hal.h"
+#include "my_time.h"
 #include <stdbool.h>
+
+const uint32_t timeout = 10;
 
 static GPIO_TypeDef* s_transducerGPIOs[] = { GPIOB, GPIOB,GPIOA, GPIOB };
 static uint8_t s_transducerPins[4][2] = {
@@ -64,15 +67,33 @@ void prepareToMeasureWind(uint8_t channel, uint8_t direction)
     setupInChannel(receiver);
 
     // Wait for the ADC
-    while ((ADC1->SR & ADC_SR_ADONS) == 0);
+    uint32_t entryTicks = millis32();
+    while ((ADC1->SR & ADC_SR_ADONS) == 0)
+    {
+        if (millis32() - entryTicks > timeout)
+        {
+            WIND_PRINT("TIMEOUT Wait for ADC ready\r\n");
+            break;
+        }
+    }
+
+    WIND_PRINT("Wind: Ready to measure\r\n");
 }
 
 void measureWind()
 {
+    return;
     // Wait to ensure the internal reference voltage is ready
     // (We might turn it off during some sleeps).
+    uint32_t entryTicks = millis32();
     while ((PWR->CSR & PWR_CSR_VREFINTRDYF) == 0)
-    {}
+    {
+        if (millis32() - entryTicks > 10)
+        {
+            WIND_PRINT("TIMEOUT waiting PWR_CSR_VREFINTRDYF!\r\n");
+            break;
+        }
+    }
     s_dma_complete = false;
     // Enabling timer 9 also enables timer 2.
     // Timer 9 will ring the transmitter using its interrupt
@@ -80,12 +101,19 @@ void measureWind()
     // The ADC will run with DMA, until it's filled the buffer
     // Then the DMA interrupt will fire, and s_dma_complete will be set.
     TIM9->CR1 |= TIM_CR1_CEN;
+    entryTicks = millis32();
     while (!s_dma_complete)
     {
+        if (millis32() - entryTicks > 10)
+        {
+            WIND_PRINT("TIMEOUT waiting s_dma_complete!\r\n");
+            break;
+        }
         // Nothing to do while our interrupts, timers, and DMA handle the measurement.
         // We stay in full power for the ADC, &c, but shut down the core to reduce consumption.
         __WFE();
     }
+    WIND_PRINT("Wind: Measurement complete\r\n");
 }
 
 void doneMeasureWind()
@@ -184,4 +212,132 @@ void timer9_tick()
 void dma1_channel1_irq()
 {
     s_dma_complete = true;
+}
+
+static void InitADC()
+{
+    // Turn on power
+    RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN | RCC_APB2ENR_ADC1EN;
+
+    // Pin 5: ADC in
+    GPIOA->MODER = (GPIOA->MODER & ~GPIO_MODER_MODER5_Msk) | MODE_ANALOG << (5 * 2);
+
+    // Ecowiit firmware also has B1 as analog in, but that's for measuring the battery.
+    // We're going to ignore that.
+
+    // Turn off the ADC before setting things:
+    ADC1->CR2 &= ~ADC_CR2_ADON;
+
+    // no prescaler, no internal temp or voltage
+    ADC->CCR &= ~(ADC_CCR_ADCPRE_Msk | ADC_CCR_TSVREFE_Msk);
+    
+    // I don't think we want scan; we only want to sample one channel
+    ADC1->CR1 = (ADC1->CR1 
+        &~(ADC_CR1_AWDCH_Msk | ADC_CR1_EOCSIE_Msk | ADC_CR1_AWDIE_Msk | ADC_CR1_JEOCIE | ADC_CR1_AWDSGL_Msk |
+           ADC_CR1_JAUTO_Msk | ADC_CR1_DISCEN_Msk | ADC_CR1_JDISCEN_Msk | ADC_CR1_DISCNUM_Msk | ADC_CR1_PDD_Msk |
+           ADC_CR1_PDI_Msk | ADC_CR1_JAWDEN | ADC_CR1_AWDEN | ADC_CR1_RES_Msk | ADC_CR1_OVRIE | ADC_CR1_SCAN)) ;
+    // Continous capture, use DMA, start on external trigger from TIM2.
+    ADC1->CR2 = (ADC1->CR2 & (0x8080F088)) 
+                | (ADC_CR2_CONT | ADC_CR2_DMA | ADC_EXTERNALTRIGCONVEDGE_RISING | ADC_EXTERNALTRIGCONV_T2_TRGO);
+    
+    // 4 cycle sample time on channel 0 (and channel 1? Confusing indexing in documentation)
+    ADC1->SMPR3 &= ~(ADC_SMPR3_SMP0_Msk | ADC_SMPR3_SMP1_Msk);
+    // Only 1 channel (Do we need this if scan == 0?)
+    ADC1->SQR1 &= ~(ADC_SQR1_L_Msk);
+    // Channel = a5
+    ADC1->SQR5 = (ADC1->SQR5 & ~ADC_SQR5_SQ1_Msk) | 5;
+}
+
+static void InitDMA()
+{
+    RCC->AHBENR |= RCC_AHBENR_DMA1EN;
+
+    DMA1_Channel1->CCR &= ~DMA_CCR_EN;
+
+    // Tell DMA1 to read from the ADC
+    DMA1_Channel1->CPAR = (uint32_t) &ADC1->DR;
+    DMA1_Channel1->CMAR = (uint32_t)g_wind_measurement; // We probably need to set this before each transfer.
+    DMA1_Channel1->CNDTR = (DMA1_Channel1->CNDTR & 0xFFFF0000) | WIND_SAMPLE_SIZE; 
+    DMA1_Channel1->CCR = (DMA1_Channel1->CCR | 0xFFFF8000)
+        | DMA_CCR_TCIE // Transfer complete interrupt enable
+        | (DMA_CCR_PL_1 | DMA_CCR_PL_0)  // 11: Very high priority
+        | DMA_CCR_MSIZE_0 // 01: 16 bit data in memory
+        | DMA_CCR_PSIZE_0 // 01: 16 bit data in peripheral (is this important?)
+        | DMA_CCR_MINC; // Memory increment (post-increment address after transfer)
+
+    HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
+}
+
+static void InitGPIO()
+{
+    // a4 - set low to power on analog circuitry
+    // a6, a7: Select which sensor is amplified
+    // a(1, 8) + b(8,9,10,11,14,15) - drive ultrasonic sensors
+    
+    // Set a6, a7, a4, a1, a8 to output:
+    GPIOA->MODER = (GPIOA->MODER 
+        & ~(GPIO_MODER_MODER6_Msk | GPIO_MODER_MODER7_Msk | GPIO_MODER_MODER4_Msk | GPIO_MODER_MODER1_Msk | GPIO_MODER_MODER8_Msk)) 
+        | (GPIO_MODER_MODER6_0 | GPIO_MODER_MODER7_0 | GPIO_MODER_MODER4_0 | GPIO_MODER_MODER1_0 | GPIO_MODER_MODER8_0);
+
+    // Set B8,9,10,11,14,15 to output,
+    // Set B3, B5 to analog:
+    GPIOB->MODER = (GPIOB->MODER
+        & ~(GPIO_MODER_MODER8_Msk | GPIO_MODER_MODER9_Msk | GPIO_MODER_MODER10_Msk |
+            GPIO_MODER_MODER11_Msk | GPIO_MODER_MODER14_Msk | GPIO_MODER_MODER15_Msk |
+            GPIO_MODER_MODER3_Msk | GPIO_MODER_MODER5_Msk))
+        | (GPIO_MODER_MODER8_0 | GPIO_MODER_MODER9_0 | GPIO_MODER_MODER10_0 | GPIO_MODER_MODER11_0 
+            | GPIO_MODER_MODER14_0 | GPIO_MODER_MODER15_0 |
+            GPIO_MODER_MODER3_Msk | GPIO_MODER_MODER5_Msk );
+
+    // We probably want our drive pins 'Fast'
+
+    // Set A4 LOW to power on analog circuitry
+    GPIOA->BSRR = 1 << (4 + 16);
+}
+
+static void InitTimers()
+{
+    //Enable the clocks
+    RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;
+    RCC->APB2ENR |= RCC_APB2ENR_TIM9EN;
+
+    // Probably don't need to do this, but...
+    TIM9->CR1 = (TIM9->CR1 & 0xFFFFFC00);
+    TIM9->ARR = 399;
+    // Set Timer 9 to generate a TRGO trigger on enable
+    TIM9->CR2 = (TIM9->CR2 & 0xFFFFFF07) | TIM_CR2_MMS_0;
+    
+    // Set TIM2 to be one shot
+    TIM2->CR1 = (TIM2->CR1 & 0xFFFFFC00)
+                 | TIM_CR1_OPM;
+    // Set TIM2 to generate a TRGO trigger on update
+    TIM2->CR2 = (TIM9->CR2 & 0xFFFFFF07) | TIM_CR2_MMS_1;
+    // Trigger source TS = 000 => TIM9 trigger
+    // Slave mode set to Trigger Mode SMS = 110
+    TIM2->SMCR = (TIM2->SMCR & 0xFFFF0000) | TIM_SMCR_SMS_1 | TIM_SMCR_SMS_2;
+    TIM2->ARR = 6144; // Run for 0.192ms
+    // Enable interrupt
+    TIM9->DIER = TIM9->DIER | TIM_DIER_UIE;
+    HAL_NVIC_SetPriority(TIM9_IRQn, 0,0);
+    HAL_NVIC_EnableIRQ(TIM9_IRQn);
+}
+
+void TIM9_IRQHandler()
+{
+    timer9_tick();
+    TIM9->SR &= ~TIM_SR_UIF;
+}
+
+void DMA1_Channel1_IRQHandler(void)
+{
+    dma1_channel1_irq();
+    DMA1->IFCR |= DMA_IFCR_CTCIF1;
+}
+
+void initWind()
+{
+    InitADC();
+    InitDMA();
+    InitTimers();
 }

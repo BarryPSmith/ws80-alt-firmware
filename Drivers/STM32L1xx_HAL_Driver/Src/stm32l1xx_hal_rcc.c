@@ -676,7 +676,6 @@ HAL_StatusTypeDef HAL_RCC_OscConfig(RCC_OscInitTypeDef  *RCC_OscInitStruct)
       __HAL_RCC_PWR_CLK_DISABLE();
     }
   }
-
   /*-------------------------------- PLL Configuration -----------------------*/
   /* Check the parameters */
   assert_param(IS_RCC_PLL(RCC_OscInitStruct->PLL.PLLState));
@@ -759,6 +758,15 @@ HAL_StatusTypeDef HAL_RCC_OscConfig(RCC_OscInitTypeDef  *RCC_OscInitStruct)
            (READ_BIT(pll_config, RCC_CFGR_PLLMUL) != RCC_OscInitStruct->PLL.PLLMUL) ||
            (READ_BIT(pll_config, RCC_CFGR_PLLDIV) != RCC_OscInitStruct->PLL.PLLDIV))
         {
+          
+          volatile int foo;
+          while (1)
+          {
+            for (uint32_t i = 0; i < 250000; i++)
+              foo = !foo;
+            // Toggle pin 1:
+              GPIOA->ODR ^= 1;
+          }
           return HAL_ERROR;
         }
       }

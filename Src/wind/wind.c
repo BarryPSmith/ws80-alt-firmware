@@ -15,7 +15,7 @@ uint8_t g_windRingCounts[6];
 
 static uint32_t s_last_wind_sample;
 
-const uint32_t wind_sample_rate = 1;
+const uint32_t wind_sample_interval = 1;
 const uint8_t max_volume = 12;
 
 void sample_wind();
@@ -23,8 +23,9 @@ void sample_wind();
 void process_wind()
 {
     uint32_t rtcTicksLocal = g_rtcTicks;
-    if (rtcTicksLocal - s_last_wind_sample < wind_sample_rate)
+    if (rtcTicksLocal - s_last_wind_sample > wind_sample_interval)
     {
+        WIND_PRINT("Sampling Wind!\r\n");
         s_last_wind_sample = rtcTicksLocal;
         sample_wind();
     }

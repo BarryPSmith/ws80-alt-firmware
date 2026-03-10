@@ -88,6 +88,7 @@ void processWindWaveform(uint8_t channel, uint8_t direction)
 
     double phase = atan2(sinSum, cosSum);
     s_signalPhases[channel][direction] = phase * (1 << 13); // phase maximum +/- pi, this has maximum value +/- 2^15
+    WIND_PRINT("Wind: Process waveform complete!\r\n");
 }
 
 q18_13 normalise_angle(q18_13 angle)
@@ -162,6 +163,7 @@ void calculate_wind(int16_t *x_cmps, int16_t *y_cmps)
     }
     *x_cmps = best_x;
     *y_cmps = best_y;
+    WIND_PRINT("Wind: calculate_wind complete!\r\n");
 }
 
 // Maximum returned values 2^14

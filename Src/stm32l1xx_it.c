@@ -22,6 +22,7 @@
 #include "stm32l1xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -41,7 +42,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN PV */
-
+extern volatile bool s_alarmSignalled;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -219,6 +220,7 @@ void RTC_WKUP_IRQHandler(void)
 /**
   * @brief This function handles DMA1 channel1 global interrupt.
   */
+ #if 0
 void DMA1_Channel1_IRQHandler(void)
 {
   /* USER CODE BEGIN DMA1_Channel1_IRQn 0 */
@@ -229,6 +231,7 @@ void DMA1_Channel1_IRQHandler(void)
 
   /* USER CODE END DMA1_Channel1_IRQn 1 */
 }
+#endif
 
 /**
   * @brief This function handles USB low priority interrupt.
@@ -244,6 +247,7 @@ void USB_LP_IRQHandler(void)
   /* USER CODE END USB_LP_IRQn 1 */
 }
 
+#if 0
 /**
   * @brief This function handles TIM9 global interrupt.
   */
@@ -257,6 +261,7 @@ void TIM9_IRQHandler(void)
 
   /* USER CODE END TIM9_IRQn 1 */
 }
+#endif
 
 /**
   * @brief This function handles EXTI line[15:10] interrupts.
@@ -278,6 +283,7 @@ void EXTI15_10_IRQHandler(void)
 void RTC_Alarm_IRQHandler(void)
 {
   /* USER CODE BEGIN RTC_Alarm_IRQn 0 */
+  s_alarmSignalled = true;
 
   /* USER CODE END RTC_Alarm_IRQn 0 */
   HAL_RTC_AlarmIRQHandler(&hrtc);

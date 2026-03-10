@@ -20,9 +20,9 @@ TARGET = ws80-alt-firmware
 # building variables
 ######################################
 # debug build?
-DEBUG = 1
+DEBUG = 0
 # optimization
-OPT = -Og
+OPT = -O2
 
 
 #######################################
@@ -42,6 +42,8 @@ Src/temperature.c \
 Src/wind/wind.c \
 Src/wind/wind_phys.c \
 Src/wind/wind_calc.c \
+Src/test.c \
+Src/debug.c \
 Src/usb_device.c \
 Src/usbd_conf.c \
 Src/usbd_desc.c \
@@ -129,6 +131,7 @@ AS_DEFS =
 
 # C defines
 C_DEFS =  \
+-DDEBUG \
 -DUSE_HAL_DRIVER \
 -DSTM32L151xC
 
@@ -149,9 +152,9 @@ C_INCLUDES =  \
 
 
 # compile gcc flags
-ASFLAGS = $(MCU) $(AS_DEFS) $(AS_INCLUDES) $(OPT) -Wall -fdata-sections -ffunction-sections
+ASFLAGS = $(MCU) $(AS_DEFS) $(AS_INCLUDES) $(OPT) -Wall -fdata-sections -ffunction-sections -flto
 
-CFLAGS += $(MCU) $(C_DEFS) $(C_INCLUDES) $(OPT) -Wall -fdata-sections -ffunction-sections
+CFLAGS += $(MCU) $(C_DEFS) $(C_INCLUDES) $(OPT) -Wall -fdata-sections -ffunction-sections -flto
 
 ifeq ($(DEBUG), 1)
 CFLAGS += -g -gdwarf-2
@@ -171,7 +174,7 @@ LDSCRIPT = STM32L151XX_FLASH.ld
 # libraries
 LIBS = -lc -lm -lnosys 
 LIBDIR = 
-LDFLAGS = $(MCU) -specs=nano.specs -T$(LDSCRIPT) $(LIBDIR) $(LIBS) -Wl,-Map=$(BUILD_DIR)/$(TARGET).map,--cref -Wl,--gc-sections
+LDFLAGS = $(MCU) -specs=nano.specs -T$(LDSCRIPT) $(LIBDIR) $(LIBS) -Wl,-Map=$(BUILD_DIR)/$(TARGET).map,--cref -Wl,--gc-sections,-flto
 
 # default action: build all
 all: $(BUILD_DIR)/$(TARGET).elf $(BUILD_DIR)/$(TARGET).hex $(BUILD_DIR)/$(TARGET).bin

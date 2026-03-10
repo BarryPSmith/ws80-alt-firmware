@@ -11,6 +11,7 @@
 #include "usb_device.h"
 #include "wind.h"
 #include "temperature.h"
+#include "my_time.h"
 #include <stdbool.h>
 
 /* Private includes ----------------------------------------------------------*/
@@ -66,7 +67,7 @@ static void MX_TIM2_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+void Test();
 /* USER CODE END 0 */
 
 /**
@@ -77,7 +78,10 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+  GPIOA->ODR = 1;
+  // The bootloader sets us to use the PLL, so our later attempt to change the PLL config results in an error.
+  // Reset the clock to MSI - the reset value.
+  RCC->CFGR &= ~RCC_CFGR_SW_Msk;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -98,20 +102,24 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_DMA_Init();
-  MX_ADC_Init();
+  //MX_DMA_Init();
+  //MX_ADC_Init();
   MX_I2C1_Init();
-  MX_IWDG_Init();
+  //MX_IWDG_Init();
   MX_RTC_Init();
+  #ifdef DEBUG
   MX_USB_DEVICE_Init();
-  MX_TIM9_Init();
-  MX_TIM2_Init();
+  #endif
+  //MX_TIM9_Init();
+  //MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
-
+  initWind();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  Test();
+  while(1);
   while (1)
   {
     /* USER CODE END WHILE */
@@ -140,9 +148,9 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSI
-                              |RCC_OSCILLATORTYPE_HSE|RCC_OSCILLATORTYPE_LSE;
-  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+ RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSI
+ |RCC_OSCILLATORTYPE_HSE|RCC_OSCILLATORTYPE_LSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON; 
   RCC_OscInitStruct.LSEState = RCC_LSE_ON;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
@@ -155,7 +163,7 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-
+  
   /** Initializes the CPU, AHB and APB buses clocks
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
@@ -578,7 +586,7 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-
+volatile bool foo;
 /* USER CODE END 4 */
 
 /**
@@ -590,8 +598,15 @@ void Error_Handler(void)
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
+  // Set A0 output.
+  GPIOA->MODER = GPIOA->MODER | 1;
+  GPIOA->ODR = 1;
   while (1)
   {
+    for (uint32_t i = 0; i < 1000000; i++)
+      foo = !foo;
+    // Toggle pin 1:
+      GPIOA->ODR ^= 1;
   }
   /* USER CODE END Error_Handler_Debug */
 }

@@ -7,8 +7,16 @@
 
 #pragma once
 #include <stdint.h>
+#include "debug.h"
 
 #define WIND_SAMPLE_SIZE 256
+
+#define DEBUG_WIND
+#ifdef DEBUG_WIND
+#define WIND_PRINT(...) do { debug_print(__VA_ARGS__); } while (0)
+#else
+#define WIND_PRINT(...) do {} while (0)
+#endif
 
 enum transducer_enum
 {
@@ -24,3 +32,4 @@ extern uint8_t g_windRingCounts[6];
 extern uint32_t g_signalPowers[6][2];
 
 void process_wind();
+void initWind();
