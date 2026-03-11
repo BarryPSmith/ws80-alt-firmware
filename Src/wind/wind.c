@@ -29,7 +29,11 @@ void sample_wind();
 
 bool process_wind()
 {
+    #ifdef DELAYED_ADC
+    g_wind_measurement = scopePacket.Buffer;
+    #else
     g_wind_measurement = scopePacket.Buffer + 192;
+    #endif
     uint32_t rtcTicksLocal = g_rtcTicks;
     if (rtcTicksLocal - s_last_wind_sample > wind_sample_interval)
     {

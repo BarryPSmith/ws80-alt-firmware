@@ -81,9 +81,15 @@ static void InitADC()
         &~(ADC_CR1_AWDCH_Msk | ADC_CR1_EOCSIE_Msk | ADC_CR1_AWDIE_Msk | ADC_CR1_JEOCIE | ADC_CR1_AWDSGL_Msk |
            ADC_CR1_JAUTO_Msk | ADC_CR1_DISCEN_Msk | ADC_CR1_JDISCEN_Msk | ADC_CR1_DISCNUM_Msk | ADC_CR1_PDD_Msk |
            ADC_CR1_PDI_Msk | ADC_CR1_JAWDEN | ADC_CR1_AWDEN | ADC_CR1_RES_Msk | ADC_CR1_OVRIE | ADC_CR1_SCAN)) ;
-    // Continous capture, use DMA, start on external trigger from TIM9.
+    // Continous capture, use DMA, start on external trigger from TIM2.
     ADC1->CR2 = (ADC1->CR2 & (0x8080F088)) 
-                | (ADC_CR2_CONT | ADC_CR2_DMA | ADC_EXTERNALTRIGCONVEDGE_RISING | ADC_EXTERNALTRIGCONV_T9_TRGO);
+                | (ADC_CR2_CONT | ADC_CR2_DMA | ADC_EXTERNALTRIGCONVEDGE_RISING | 
+                    #ifdef DELAYED_ADC
+                    ADC_EXTERNALTRIGCONV_T2_TRGO
+                    #else
+                    ADC_EXTERNALTRIGCONV_T9_TRGO
+                    #endif
+                );
     
     // 4 cycle sample time on channel 0 (and channel 1? Confusing indexing in documentation)
     ADC1->SMPR3 &= ~(ADC_SMPR3_SMP0_Msk | ADC_SMPR3_SMP1_Msk);
@@ -158,6 +164,17 @@ static void InitTimers()
     // Set Timer 9 to generate a TRGO trigger on enable
     TIM9->CR2 = (TIM9->CR2 & 0xFFFFFF07) | TIM_CR2_MMS_0;
     
+    // Set TIM2 to be one shot
+    TIM2->CR1 = (TIM2->CR1 & 0xFFFFFC00)
+    | TIM_CR1_OPM;
+    // Set TIM2 to generate a TRGO trigger on update
+    TIM2->CR2 = (TIM9->CR2 & 0xFFFFFF07) | TIM_CR2_MMS_1;
+    // Trigger source TS = 000 => TIM9 trigger
+    // Slave mode set to Trigger Mode SMS = 110
+    TIM2->SMCR = (TIM2->SMCR & 0xFFFF0000) | TIM_SMCR_SMS_1 | TIM_SMCR_SMS_2;
+    // Run for 205us:
+    TIM2->ARR = SystemCoreClock / 1000000 * ADC_START_DELAY;
+
     // Enable interrupt
     TIM9->DIER = TIM9->DIER | TIM_DIER_UIE;
     HAL_NVIC_SetPriority(TIM9_IRQn, 0,0);
@@ -313,6 +330,20 @@ static void UpdateScopeInputChannel()
 
 static void BeginScopeSample()
 {
+
+    // Reset counters,
+    // Set the update bit to ensure any changes have been copied to shadow registers (?)
+    // We need to do this before we turn the ADC on, or the update event of TIM2 will trigger it.
+    // We also need to disable TIM9 interrupts while we do this.
+    tim9Ticks = 0;
+    TIM9->CNT = 0;
+    TIM2->CNT = 0;
+    TIM9->DIER &= ~TIM_DIER_UIE;   
+    TIM2->EGR |= TIM_EGR_UG;
+    TIM9->EGR |= TIM_EGR_UG;
+    TIM9->SR &= ~TIM_SR_UIF;
+    TIM9->DIER |= TIM_DIER_UIE;
+
     // Reset 'use DMA' bit of ADC (datasheet says this is necessary)
     ADC1->CR2 &= ~ADC_CR2_DMA;
     ADC1->CR2 |= ADC_CR2_DMA;
@@ -335,13 +366,6 @@ static void BeginScopeSample()
     // Wait for the ADC to turn on.
     while ((ADC1->SR & ADC_SR_ADONS) == 0) { }
     
-    // Reset counters, ensure any changes have been copied to shadow registers (?)
-    tim9Ticks = 0;
-    TIM9->CNT = 0;
-    TIM2->CNT = 0;
-    // Enable TIM2 input Capture compare:
-    TIM2->EGR |= TIM_EGR_UG;
-    TIM9->EGR |= TIM_EGR_UG;
     // Start TIM9. TIM2 and ADC will trigger off this event to start too.
     s_dma_complete = false;
     TIM9->CR1 |= TIM_CR1_CEN;
@@ -352,7 +376,7 @@ static void EndScopeSample()
     // Turn off the ADC   
     ADC1->CR2 &= ~ADC_CR2_ADON;
     // Disable timer 2
-    TIM2->CR1 &= ~TIM_CR1_CEN;
+    // TIM2->CR1 &= ~TIM_CR1_CEN;
 }
 
 static void SendScopeSampleBinary()
