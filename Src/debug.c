@@ -37,10 +37,8 @@ void debug_print(char* format, ...)
 void wait_for_continue()
 {
   #ifdef DEBUG
-  if (g_binaryDebug || g_runFlag)
-    return;
   g_continueFlag = false;
-  while (!g_continueFlag);
+  while (!g_continueFlag && !(g_binaryDebug || g_runFlag));
   #endif
 }
 

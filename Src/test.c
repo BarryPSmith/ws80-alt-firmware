@@ -16,11 +16,14 @@ void Test()
         //debug_print("I'm going to Alarm delay now.\r\n");
 
         bool processed = process_wind();
-        //ProcessTemperature();
-        debug_print("Finished process_wind\r\n");
+        // ProcessTemperature();
+        // debug_print("Finished process_wind\r\n");
 
         if (processed)
+        {
             printWindDebug();
+            wait_for_continue();
+        }
 
         delay_stopped(100);
     }

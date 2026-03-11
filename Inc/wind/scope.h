@@ -9,6 +9,7 @@ void adjustRingCounts();
 
 #define SCOPE_BUFFER_SIZE 980
 #define CAPTURE_COUNT 20
+#define TRANSDUCER_FREQ 40000
 
 // Have to be careful with this. Buffer must be aligned for DMA to work;
 // But we want it to work over network - so packing would be ideal.

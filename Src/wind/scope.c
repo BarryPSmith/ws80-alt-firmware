@@ -9,9 +9,9 @@
 #include "stm32l1xx_hal_adc.h"
 #include "debug.h"
 #include "wind.h"
+#include "my_time.h"
 #include <string.h>
 
-#define INTERRUPT_PWM
 //#define MEASURE_OUTPUT
 
 struct ScopePacket scopePacket;
@@ -44,17 +44,20 @@ uint8_t channelPins[4][2] = {
 //uint32_t start_subsystick;
 
 uint32_t waitCounts;
+static volatile bool s_dma_complete;
 
-static void SendScopeSample();
 static void SendScopeSampleBinary();
 static void EndScopeSample();
 static void BeginScopeSample();
 static void UpdateScopeChannels(uint8_t channel, uint8_t direction);
 static void UpdateScopeOutChannel();
 static void UpdateScopeInputChannel();
+#ifdef DEBUG_SCOPE
+static void SendScopeSample();
 static void sendDmaState();
 static void sendADCState();
 static void SendScopeDebug();
+#endif
 
 static void InitADC()
 {
@@ -101,11 +104,14 @@ static void InitDMA()
     DMA1_Channel1->CMAR = (uint32_t)scopePacket.Buffer; // We probably need to set this before each transfer.
     DMA1_Channel1->CNDTR = (DMA1_Channel1->CNDTR & 0xFFFF0000) | SCOPE_BUFFER_SIZE; 
     DMA1_Channel1->CCR = (DMA1_Channel1->CCR | 0xFFFF8000)
-        //DMA_CCR_TCIE // Transfer complete interrupt enable
+        | DMA_CCR_TCIE // Transfer complete interrupt enable
         | (DMA_CCR_PL_1 | DMA_CCR_PL_0)  // 11: Very high priority
         | DMA_CCR_MSIZE_0 // 01: 16 bit data in memory
         | DMA_CCR_PSIZE_0 // 01: 16 bit data in peripheral (is this important?)
         | DMA_CCR_MINC; // Memory increment (post-increment address after transfer)
+    
+    HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
 }
 
 static void InitGPIO()
@@ -148,16 +154,14 @@ static void InitTimers()
 
     // Probably don't need to do this, but...
     TIM9->CR1 = (TIM9->CR1 & 0xFFFFFC00);
-    TIM9->ARR = 399;
+    TIM9->ARR = SystemCoreClock / (2 * TRANSDUCER_FREQ) - 1;//399;
     // Set Timer 9 to generate a TRGO trigger on enable
     TIM9->CR2 = (TIM9->CR2 & 0xFFFFFF07) | TIM_CR2_MMS_0;
     
     // Enable interrupt
-    #ifdef INTERRUPT_PWM
     TIM9->DIER = TIM9->DIER | TIM_DIER_UIE;
     HAL_NVIC_SetPriority(TIM9_IRQn, 0,0);
     HAL_NVIC_EnableIRQ(TIM9_IRQn);
-    #endif
 }
 
 void TIM9_IRQHandler()
@@ -183,6 +187,12 @@ void TIM9_IRQHandler()
     tim9Ticks++;
 }
 
+void DMA1_Channel1_IRQHandler(void)
+{
+    s_dma_complete = true;
+    DMA1->IFCR |= DMA_IFCR_CTCIF1;
+}
+
 void InitScope()
 {
     InitADC();
@@ -194,14 +204,14 @@ void InitScope()
 
 static bool IsSampleComplete()
 {
-    return DMA1_Channel1->CNDTR == 0;
+    return s_dma_complete;
 }
 
 void ProcessScope(uint8_t channel, uint8_t direction)
 {
     while (1)
     {
-        uint32_t currentTicks = HAL_GetTick();
+        uint32_t currentTicks = millis32();
         switch (scopeState)
         {
             case ScopeState_Idle:
@@ -222,7 +232,7 @@ void ProcessScope(uint8_t channel, uint8_t direction)
             }
             else if (currentTicks - lastScopeTicks > scopeSampleInterval)
             {
-                debug_print("SCOPE TIMEOUT ");
+                WIND_PRINT("SCOPE TIMEOUT ");
                 #ifdef DEBUG_SCOPE
                 CDC_Transmit_FS((uint8_t*)buffer, sizeof(buffer));
                 HAL_Delay(1);
@@ -240,6 +250,7 @@ void ProcessScope(uint8_t channel, uint8_t direction)
             waitCounts++;
             break;
         }
+        __WFE();
     }
 }
 
@@ -305,9 +316,6 @@ static void BeginScopeSample()
     // Reset 'use DMA' bit of ADC (datasheet says this is necessary)
     ADC1->CR2 &= ~ADC_CR2_DMA;
     ADC1->CR2 |= ADC_CR2_DMA;
-    // Reset 'use DMA' of TIM2?
-    TIM2->DIER &= ~TIM_DIER_CC4DE;
-    TIM2->DIER |= TIM_DIER_CC4DE;
     // Clear ADC_SR
     ADC1->SR &= ~0x1Ful;
     // Turn on ADC
@@ -325,29 +333,18 @@ static void BeginScopeSample()
     *toggleODR &= ~togglePins;
 
     // Wait for the ADC to turn on.
-    while ((ADC1->SR & ADC_SR_ADONS) == 0)
-    {
-
-    }
-    //start_systick = HAL_GetTick();
-    //start_subsystick = SysTick->VAL;
-
+    while ((ADC1->SR & ADC_SR_ADONS) == 0) { }
+    
     // Reset counters, ensure any changes have been copied to shadow registers (?)
     tim9Ticks = 0;
     TIM9->CNT = 0;
     TIM2->CNT = 0;
     // Enable TIM2 input Capture compare:
-    TIM2->CCER |= TIM_CCER_CC4E;
     TIM2->EGR |= TIM_EGR_UG;
     TIM9->EGR |= TIM_EGR_UG;
     // Start TIM9. TIM2 and ADC will trigger off this event to start too.
+    s_dma_complete = false;
     TIM9->CR1 |= TIM_CR1_CEN;
-    #ifndef INTERRUPT_PWM
-    //PWMLoop(toggleGpio, togglePin1, togglePin2);
-    PWMLoop3(toggleGpio, togglePin1, togglePin2);
-    TIM2->CR1 &= ~TIM_CR1_CEN;
-    TIM9->CR1 &= ~TIM_CR1_CEN;
-    #endif
 }
 
 static void EndScopeSample()
@@ -406,7 +403,6 @@ void adjustRingCounts()
 }
 
 #ifdef DEBUG_SCOPE
-
 static void sendDmaState()
 {
     char buffer[200];
@@ -471,17 +467,5 @@ static void SendScopeDebug()
         scopePacket.Captures[16],scopePacket.Captures[17],scopePacket.Captures[18],scopePacket.Captures[19]);
     CDC_Transmit_FS((uint8_t*)buffer, len);
     HAL_Delay(1);
-}
-
-volatile uint16_t comp_IRQ_calls;
-void COMP_IRQHandler()
-{
-    // Original firmware toggles B4 in this interrupt.
-    EXTI->PR = EXTI_PR_PIF22;
-    /*scopePacket.Captures[comp_IRQ_calls % CAPTURE_COUNT] = TIM2->CNT;
-    comp_IRQ_calls++;
-    scopePacket.Captures[comp_IRQ_calls % CAPTURE_COUNT] = TIM2->CCR4;
-    comp_IRQ_calls++;*/
-    comp_IRQ_calls++;
 }
 #endif
