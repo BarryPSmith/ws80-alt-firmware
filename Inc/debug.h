@@ -7,3 +7,5 @@
 
 void debug_print(char* format, ...);
 void debug_print2(char* format, ...);
+
+void CDC_Transmit_FS_Wait(uint8_t* Buf, uint16_t Len);

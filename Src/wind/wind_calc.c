@@ -43,6 +43,28 @@ q1_14 s_tangentVectors[6][2] =
   {  qn_14_sqrt1_2, -qn_14_sqrt1_2 } ,
   {  qn_14_sqrt1_2,  qn_14_sqrt1_2 } };
 
+  void print_wind_calc_debug()
+{
+    debug_print("Wind calc:\r\n");
+    debug_print("Phases:\r\n %d, %d\r\n %d, %d\r\n %d, %d\r\n %d, %d\r\n %d, %d\r\n %d, %d\r\n",
+        s_signalPhases[0][0], s_signalPhases[0][1],
+        s_signalPhases[1][0], s_signalPhases[1][1],
+        s_signalPhases[2][0], s_signalPhases[2][1],
+        s_signalPhases[3][0], s_signalPhases[3][1],
+        s_signalPhases[4][0], s_signalPhases[4][1],
+        s_signalPhases[5][0], s_signalPhases[5][1]);
+    debug_print("Powers:\r\n %d, %d,\r\n %d, %d,\r\n %d, %d,\r\n %d, %d,\r\n %d, %d,\r\n %d, %d\r\n",
+        g_signalPowers[0][0], g_signalPowers[0][1],
+        g_signalPowers[1][0], g_signalPowers[1][1],
+        g_signalPowers[2][0], g_signalPowers[2][1],
+        g_signalPowers[3][0], g_signalPowers[3][1],
+        g_signalPowers[4][0], g_signalPowers[4][1],
+        g_signalPowers[5][0], g_signalPowers[5][1]);
+    uint8_t read_idx = (s_sample_write_idx + 1) % SAMPLE_BUFFER_SIZE;
+    debug_print("Last Sample: %d, %d\r\n\r\n",
+        s_samples[read_idx][0], s_samples[read_idx][1]);
+}
+
 q18_13 normalise_angle(q18_13 angle);
 void get_radius_vector_cmps(int16_t* x_cmps, int16_t* y_cmps, q18_13 phaseDiff, uint8_t channel);
 uint16_t get_speed_cmps(uint8_t channel, int32_t timeDiff_ns);
@@ -65,12 +87,12 @@ void processWindWaveform(uint8_t channel, uint8_t direction)
 
     const uint8_t sampleMax = 245; // 49 * 5;
     const uint8_t cycleLength = 49;
-    uint32_t sum = 0;
+    int32_t sum = 0;
     for (uint8_t i = 0; i < sampleMax; i++)
         sum += g_wind_measurement[i];
-    uint32_t avg = sum / sampleMax;
-    uint32_t cosSum = 0;
-    uint32_t sinSum = 0;
+    int32_t avg = sum / sampleMax;
+    int32_t cosSum = 0;
+    int32_t sinSum = 0;
     for (uint8_t i = 0; i < sampleMax; i++)
     {
         int16_t rawVal = g_wind_measurement[i];
@@ -80,10 +102,13 @@ void processWindWaveform(uint8_t channel, uint8_t direction)
         int32_t sinVal = val * sin24_5[i % cycleLength] >> 8; // as above
         sinSum += sinVal; // as above
     }
-    const uint32_t window_sum = 507782; // 2^19
+    const int32_t window_sum = 507782; // 2^19
+    WIND_PRINT("%d, %d avg: %ld, cosSum: %ld, sinSum: %ld\r\n", channel, direction, avg, cosSum, sinSum);
     int32_t cos16 = cosSum / window_sum; // maximum of 2^12. More likely 2^8 or less.
     int32_t sin16 = sinSum / window_sum;
+    
     uint32_t power = cos16 * cos16 + sin16 * sin16; // Maximum of 2^24
+    WIND_PRINT("%d, %d cos16: %ld, sin16: %ld, power: %ld\r\n", channel, direction, cos16, sin16, power);
     g_signalPowers[channel][direction] = power;
 
     double phase = atan2(sinSum, cosSum);
@@ -111,8 +136,8 @@ void calculate_wind(int16_t *x_cmps, int16_t *y_cmps)
         signalPhaseDiffs[channel] = phaseDiff; // maximum 2^15
     }
     uint32_t best_residual = 0xFFFFFFFF;
-    uint16_t best_x;
-    uint16_t best_y;
+    int16_t best_x;
+    int16_t best_y;
     for (int8_t ch2Wrap = -1; ch2Wrap <= 1; ch2Wrap++)
     {
         for (int8_t ch3Wrap = -1; ch3Wrap <= 1; ch3Wrap++)

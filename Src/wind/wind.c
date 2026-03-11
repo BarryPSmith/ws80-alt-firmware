@@ -9,18 +9,19 @@
 #include "wind.h"
 #include "wind_phys.h"
 #include "wind_calc.h"
+#include "debug.h"
 
 volatile uint16_t g_wind_measurement[WIND_SAMPLE_SIZE];
 uint8_t g_windRingCounts[6];
 
 static uint32_t s_last_wind_sample;
 
-const uint32_t wind_sample_interval = 1;
+const uint32_t wind_sample_interval = 2;
 const uint8_t max_volume = 12;
 
 void sample_wind();
 
-void process_wind()
+bool process_wind()
 {
     uint32_t rtcTicksLocal = g_rtcTicks;
     if (rtcTicksLocal - s_last_wind_sample > wind_sample_interval)
@@ -28,7 +29,9 @@ void process_wind()
         WIND_PRINT("Sampling Wind!\r\n");
         s_last_wind_sample = rtcTicksLocal;
         sample_wind();
+        return true;
     }
+    return false;
 }
 
 const uint8_t g_channel_transducers[6][2] =
@@ -55,6 +58,7 @@ void sample_wind()
             measureWind();
             doneMeasureWind();
             processWindWaveform(chan, dir);
+            SendScopeSampleBinary(chan, dir);
             delay_stopped(8);
         }
     }
@@ -64,4 +68,16 @@ void sample_wind()
     store_wind_sample(x_cmps, y_cmps);
 }
 
-
+void printWindDebug()
+{
+    print_wind_phys_debug();
+    print_wind_calc_debug();
+    debug_print("Measurement: \r\n");
+    for (int i = 0; i < 5; i++)
+    {
+        int idx = i * 30;
+        debug_print(" %4d, %4d, %4d, %4d, %4d\r\n", 
+            g_wind_measurement[idx + 0], g_wind_measurement[idx + 1], g_wind_measurement[idx + 2], g_wind_measurement[idx + 3],
+            g_wind_measurement[idx + 4]);
+    }
+}

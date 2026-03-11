@@ -11,3 +11,6 @@ void prepareToMeasureWind(uint8_t channel, uint8_t direction);
 void measureWind();
 void doneMeasureWind();
 void updatePhysicalParamters();
+void print_wind_phys_debug();
+
+void SendScopeSampleBinary(uint8_t chan, uint8_t dir);

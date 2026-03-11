@@ -158,7 +158,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
   RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL12;
-  RCC_OscInitStruct.PLL.PLLDIV = RCC_PLL_DIV4;
+  RCC_OscInitStruct.PLL.PLLDIV = RCC_PLL_DIV3;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -586,7 +586,6 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-volatile bool foo;
 /* USER CODE END 4 */
 
 /**
@@ -601,6 +600,7 @@ void Error_Handler(void)
   // Set A0 output.
   GPIOA->MODER = GPIOA->MODER | 1;
   GPIOA->ODR = 1;
+  volatile bool foo;
   while (1)
   {
     for (uint32_t i = 0; i < 1000000; i++)

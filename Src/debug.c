@@ -11,6 +11,8 @@
 #include "usbd_cdc_if.h"
 #include "debug.h"
 
+void CDC_Transmit_FS_Wait(uint8_t* Buf, uint16_t Len);
+
 void debug_print2(char* format, ...)
 {}
 
@@ -21,7 +23,20 @@ void debug_print(char* format, ...)
     va_start(args, format);
     char buffer[256];
     uint8_t len = vsnprintf(buffer, sizeof(buffer), format, args);
-    CDC_Transmit_FS((uint8_t*)buffer, len);
+    CDC_Transmit_FS_Wait((uint8_t*)buffer, len);
     HAL_Delay(1);
     #endif
+}
+
+extern USBD_HandleTypeDef hUsbDeviceFS;
+
+void CDC_Transmit_FS_Wait(uint8_t* Buf, uint16_t Len)
+{
+  USBD_CDC_HandleTypeDef *hcdc = (USBD_CDC_HandleTypeDef*)hUsbDeviceFS.pClassData;
+
+  const uint8_t timeout = 10;
+  const uint32_t entryTicks = HAL_GetTick();
+  while (hcdc->TxState && HAL_GetTick() - entryTicks < timeout);
+  CDC_Transmit_FS(Buf, Len);
+  while (hcdc->TxState && HAL_GetTick() - entryTicks < timeout);
 }

@@ -7,9 +7,10 @@
 
 #pragma once
 #include <stdint.h>
+#include <stdbool.h>
 #include "debug.h"
 
-#define WIND_SAMPLE_SIZE 256
+#define WIND_SAMPLE_SIZE 900
 
 #define DEBUG_WIND
 #ifdef DEBUG_WIND
@@ -31,5 +32,6 @@ extern volatile uint16_t g_wind_measurement[WIND_SAMPLE_SIZE];
 extern uint8_t g_windRingCounts[6];
 extern uint32_t g_signalPowers[6][2];
 
-void process_wind();
+bool process_wind();
 void initWind();
+void printWindDebug();
