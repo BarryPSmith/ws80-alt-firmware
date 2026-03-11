@@ -40,7 +40,7 @@ Src/main.c \
 Src/my_time.c \
 Src/temperature.c \
 Src/wind/wind.c \
-Src/wind/wind_phys.c \
+Src/wind/scope.c \
 Src/wind/wind_calc.c \
 Src/test.c \
 Src/debug.c \

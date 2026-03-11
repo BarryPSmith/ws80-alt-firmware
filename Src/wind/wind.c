@@ -7,11 +7,17 @@
 
 #include "my_time.h"
 #include "wind.h"
-#include "wind_phys.h"
+//#include "wind_phys.h"
+#include "scope.h"
 #include "wind_calc.h"
 #include "debug.h"
 
-volatile uint16_t g_wind_measurement[WIND_SAMPLE_SIZE];
+volatile uint16_t* g_wind_measurement; //[WIND_SAMPLE_SIZE];
+
+// We need six volume values
+// 01  02  03  12  13  23
+// NS, NE, NW, SE, SW, EW
+uint32_t g_signalPowers[6][2];
 uint8_t g_windRingCounts[6];
 
 static uint32_t s_last_wind_sample;
@@ -23,6 +29,7 @@ void sample_wind();
 
 bool process_wind()
 {
+    g_wind_measurement = scopePacket.Buffer + 192;
     uint32_t rtcTicksLocal = g_rtcTicks;
     if (rtcTicksLocal - s_last_wind_sample > wind_sample_interval)
     {
@@ -42,11 +49,6 @@ const uint8_t g_channel_transducers[6][2] =
   { 1, 3 },
   { 2, 3 } };
 
-// We need six volume values
-// 01  02  03  12  13  23
-// NS, NE, NW, SE, SW, EW
-uint8_t g_windRingCounts[6];
-uint32_t g_signalPowers[6][2];
 
 void sample_wind()
 {
@@ -54,18 +56,19 @@ void sample_wind()
     {
         for (uint8_t chan = 0; chan < 6; chan++)
         {
-            prepareToMeasureWind(chan, dir);
+            ProcessScope(chan, dir);
+            /*prepareToMeasureWind(chan, dir);
             measureWind();
-            doneMeasureWind();
+            doneMeasureWind();*/
             processWindWaveform(chan, dir);
-            SendScopeSampleBinary(chan, dir);
             delay_stopped(8);
         }
     }
-    updatePhysicalParamters();
+    //updatePhysicalParamters();
     int16_t x_cmps, y_cmps;
     calculate_wind(&x_cmps, &y_cmps);
     store_wind_sample(x_cmps, y_cmps);
+    adjustRingCounts();
 }
 
 void printWindDebug()

@@ -28,7 +28,7 @@ enum transducer_enum
 } typedef transducer_t;
 
 extern const uint8_t g_channel_transducers[6][2];
-extern volatile uint16_t g_wind_measurement[WIND_SAMPLE_SIZE];
+extern volatile uint16_t* g_wind_measurement;
 extern uint8_t g_windRingCounts[6];
 extern uint32_t g_signalPowers[6][2];
 

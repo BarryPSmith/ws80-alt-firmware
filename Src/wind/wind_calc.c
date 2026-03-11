@@ -67,7 +67,7 @@ q1_14 s_tangentVectors[6][2] =
 
 q18_13 normalise_angle(q18_13 angle);
 void get_radius_vector_cmps(int16_t* x_cmps, int16_t* y_cmps, q18_13 phaseDiff, uint8_t channel);
-uint16_t get_speed_cmps(uint8_t channel, int32_t timeDiff_ns);
+int16_t get_speed_cmps(uint8_t channel, int32_t timeDiff_ns);
 void get_average_wind(int16_t *x_cmps, int16_t *y_cmps, uint8_t sampleCount);
 uint16_t get_gust();
 
@@ -142,10 +142,13 @@ void calculate_wind(int16_t *x_cmps, int16_t *y_cmps)
     {
         for (int8_t ch3Wrap = -1; ch3Wrap <= 1; ch3Wrap++)
         {
+            WIND_PRINT("ch2wrap: %d ch3wrap: %d\r\n", ch2Wrap, ch3Wrap);
             int32_t sum_x = 0, 
                     sum_y = 0;
+            int16_t radiusVectors[6][2];
             for (uint8_t channel = 0; channel < 6; channel++)
             {
+                WIND_PRINT(" ch: %d ", channel);
                 q18_13 phaseDiff = signalPhaseDiffs[channel];
                 if (channel == 2)
                     phaseDiff += 2 * qn_13_pi * ch2Wrap;
@@ -153,8 +156,11 @@ void calculate_wind(int16_t *x_cmps, int16_t *y_cmps)
                     phaseDiff += 2 * qn_13_pi * ch3Wrap;
                 int16_t x, y;
                 get_radius_vector_cmps(&x, &y, phaseDiff, channel);
+                WIND_PRINT(" x: %d, y: %d\r\n");
                 sum_x += x; // x=2^14, summed 6 times => sum_x maximum value 2^17
                 sum_y += y;
+                radiusVectors[channel][0] = x;
+                radiusVectors[channel][1] = y;
             }
             int16_t bestFit_x = sum_x / 3; // bestfit maximum value 2^15 (reality is 2^14, but headroom is nice)
             int16_t bestFit_y = sum_y / 3;
@@ -167,7 +173,8 @@ void calculate_wind(int16_t *x_cmps, int16_t *y_cmps)
                 if (channel == 3)
                     phaseDiff += 2 * qn_13_pi * ch3Wrap;
                 int16_t x, y;
-                get_radius_vector_cmps(&x, &y, phaseDiff, channel);
+                x = radiusVectors[channel][0];
+                y = radiusVectors[channel][1];
                 int16_t diff_x = bestFit_x - x; // diff_x maximum 2^15
                 int16_t diff_y = bestFit_y - y;
                 q1_14 tangent_x = s_tangentVectors[channel][0];
@@ -178,12 +185,15 @@ void calculate_wind(int16_t *x_cmps, int16_t *y_cmps)
                     ((int32_t)dot_x * dot_x + (int32_t)dot_y * dot_y); // maximum intermediate value 2^31.
                 residual += dist_2 >> 2; // 2^31 summed 6 times but removed 2 bits => maximum 2^31.
             }
+            WIND_PRINT(" sum_x: %ld, sum_y: %ld, bestFit_x: %d, bestFit_y: %d, residual: %ld, best_residual: %ld\r\n",
+                sum_x, sum_y, bestFit_x, bestFit_y, residual, best_residual);
             if (residual < best_residual)
             {
                 best_residual = residual;
                 best_x = bestFit_x;
                 best_y = bestFit_y;
             }
+            wait_for_continue();
         }
     }
     *x_cmps = best_x;
@@ -199,7 +209,8 @@ void get_radius_vector_cmps(int16_t* x_cmps, int16_t* y_cmps, q18_13 phaseDiff, 
     // delay_ns maximum value => +/- 40,000 (40us)
     q18_13 timeDiff_ns = phaseDiff * phaseToTime_ns;
     int32_t delay_ns = timeDiff_ns >> 13;
-    uint16_t speed_cmps = get_speed_cmps(channel, delay_ns);
+    int16_t speed_cmps = get_speed_cmps(channel, delay_ns);
+    WIND_PRINT(" delay_ns: %ld, speed_cmps: %d ", delay_ns, speed_cmps);
     *x_cmps = speed_cmps * (q17_14)s_radiusVectors[channel][0] >> 14;
     *y_cmps = speed_cmps * (q17_14)s_radiusVectors[channel][1] >> 14;
 }
@@ -208,10 +219,10 @@ uint16_t g_temperature_degC_x10 = 250;
 // Maximum windspeed 100m/s
 // = 10,000 cm/s
 // 14 bits
-uint16_t get_speed_cmps(uint8_t channel, int32_t timeDiff_ns)
+int16_t get_speed_cmps(uint8_t channel, int32_t timeDiff_ns)
 {
-    uint32_t speedOfSound_dmps = 3315 + (g_temperature_degC_x10 * 61) / 100;
-    uint32_t effective_length_um;
+    int32_t speedOfSound_dmps = 3315 + (g_temperature_degC_x10 * 61) / 100;
+    int32_t effective_length_um;
     if (channel == 2 || channel == 3)
         effective_length_um = 37000;
     else

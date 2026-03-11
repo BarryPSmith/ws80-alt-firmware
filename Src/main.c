@@ -68,6 +68,7 @@ static void MX_TIM2_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 void Test();
+void InitScope();
 /* USER CODE END 0 */
 
 /**
@@ -113,7 +114,7 @@ int main(void)
   //MX_TIM9_Init();
   //MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
-  initWind();
+  InitScope();
   /* USER CODE END 2 */
 
   /* Infinite loop */

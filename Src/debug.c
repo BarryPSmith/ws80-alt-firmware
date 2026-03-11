@@ -11,6 +11,10 @@
 #include "usbd_cdc_if.h"
 #include "debug.h"
 
+volatile bool g_binaryDebug = false;
+volatile bool g_continueFlag = false;
+volatile bool g_runFlag = false;
+
 void CDC_Transmit_FS_Wait(uint8_t* Buf, uint16_t Len);
 
 void debug_print2(char* format, ...)
@@ -18,14 +22,26 @@ void debug_print2(char* format, ...)
 
 void debug_print(char* format, ...)
 {
-    #ifdef DEBUG
-    va_list args;
-    va_start(args, format);
-    char buffer[256];
-    uint8_t len = vsnprintf(buffer, sizeof(buffer), format, args);
-    CDC_Transmit_FS_Wait((uint8_t*)buffer, len);
-    HAL_Delay(1);
-    #endif
+  #ifdef DEBUG
+  if (g_binaryDebug)
+    return;
+  va_list args;
+  va_start(args, format);
+  char buffer[256];
+  uint8_t len = vsnprintf(buffer, sizeof(buffer), format, args);
+  CDC_Transmit_FS_Wait((uint8_t*)buffer, len);
+  HAL_Delay(1);
+  #endif
+}
+
+void wait_for_continue()
+{
+  #ifdef DEBUG
+  if (g_binaryDebug || g_runFlag)
+    return;
+  g_continueFlag = false;
+  while (!g_continueFlag);
+  #endif
 }
 
 extern USBD_HandleTypeDef hUsbDeviceFS;
@@ -39,4 +55,28 @@ void CDC_Transmit_FS_Wait(uint8_t* Buf, uint16_t Len)
   while (hcdc->TxState && HAL_GetTick() - entryTicks < timeout);
   CDC_Transmit_FS(Buf, Len);
   while (hcdc->TxState && HAL_GetTick() - entryTicks < timeout);
+}
+
+void handle_usb_data(uint8_t* Buf, uint32_t *Len)
+{
+  for (uint32_t i = 0; i < *Len; i++)
+  {
+    switch (Buf[i])
+    {
+      case 'B':
+        g_binaryDebug = true;
+        break;
+      case 'T':
+        g_binaryDebug = false;
+        break;
+      case 'R':
+        NVIC_SystemReset();
+        break;
+      case 'C':
+        g_continueFlag = true;
+        break;
+      case 'G':
+        g_runFlag = !g_runFlag;
+    }
+  }
 }
