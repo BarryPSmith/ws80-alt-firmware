@@ -7,11 +7,16 @@
 #pragma once
 #include <stdint.h>
 #include <stdbool.h>
+
+#define WAKEUP_FREQUENCY 4
+#define RTC_FREQ 32768
+
 uint32_t millis32();
 void set_alarm(uint16_t millisFromNow);
 void wait_until_alarm_stopped();
 void delay_stopped(uint16_t delay);
 void stop_until_event(bool returnToHSE);
+void printMillisStatus();
 
 extern uint32_t g_rtcTicks;
 extern volatile bool g_canStop;

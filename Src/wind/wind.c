@@ -22,7 +22,8 @@ uint8_t g_windRingCounts[6];
 
 static uint32_t s_last_wind_sample;
 
-const uint32_t wind_sample_interval = 2;
+uint8_t wind_sample_frequency = 2;
+
 const uint8_t max_volume = 12;
 
 void sample_wind();
@@ -35,6 +36,7 @@ bool process_wind()
     g_wind_measurement = scopePacket.Buffer + 192;
     #endif
     uint32_t rtcTicksLocal = g_rtcTicks;
+    uint8_t wind_sample_interval = WAKEUP_FREQUENCY / wind_sample_frequency;
     if (rtcTicksLocal - s_last_wind_sample > wind_sample_interval)
     {
         WIND_PRINT("Sampling Wind!\r\n");
@@ -65,6 +67,9 @@ void sample_wind()
             measureWind();
             doneMeasureWind();*/
             processWindWaveform(chan, dir);
+            // We need to wait for the transducers to ring down between measurements.
+            // Original firmware used 8ms delay, but my testing suggests 4ms is fine.
+            // We have an additional 2ms delay while we wait for the analog circuitry to stabilise.
             delay_stopped(3);
         }
     }

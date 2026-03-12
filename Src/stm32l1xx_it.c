@@ -280,6 +280,7 @@ void EXTI15_10_IRQHandler(void)
 /**
   * @brief This function handles RTC alarms A and B interrupt through EXTI line 17.
   */
+ #if 0
 void RTC_Alarm_IRQHandler(void)
 {
   /* USER CODE BEGIN RTC_Alarm_IRQn 0 */
@@ -291,6 +292,7 @@ void RTC_Alarm_IRQHandler(void)
 
   /* USER CODE END RTC_Alarm_IRQn 1 */
 }
+#endif
 
 /* USER CODE BEGIN 1 */
 

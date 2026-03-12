@@ -246,7 +246,9 @@ void ProcessScope(uint8_t channel, uint8_t direction)
             }
             else if (currentTicks - lastScopeTicks > scopeSampleInterval)
             {
-                WIND_PRINT("SCOPE TIMEOUT\r\n");
+                WIND_PRINT("SCOPE TIMEOUT: Entry: %lu, Current: %lu\r\n",
+                    lastScopeTicks, currentTicks);
+                printMillisStatus();
                 #ifdef DEBUG_SCOPE
                 CDC_Transmit_FS((uint8_t*)buffer, sizeof(buffer));
                 HAL_Delay(1);

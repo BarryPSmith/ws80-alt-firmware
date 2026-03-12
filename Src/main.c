@@ -383,12 +383,22 @@ static void MX_RTC_Init(void)
 
   /** Enable the WakeUp
   */
-  if (HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, 512, RTC_WAKEUPCLOCK_RTCCLK_DIV16) != HAL_OK)
+ const uint32_t wakeUpCounter = RTC_FREQ / WAKEUP_FREQUENCY / 16;
+  if (HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, wakeUpCounter, RTC_WAKEUPCLOCK_RTCCLK_DIV16) != HAL_OK)
   {
     Error_Handler();
   }
   /* USER CODE BEGIN RTC_Init 2 */
   
+  // Turn on Bypass shadow registers
+  // Setup Alarm A interrupts:
+  RTC->WPR = 0xCAU;
+  RTC->WPR = 0x53U;
+  RTC->CR = (RTC->CR & ~RTC_CR_ALRAE) | RTC_CR_BYPSHAD | RTC_CR_ALRAIE;
+  EXTI->IMR |= RTC_EXTI_LINE_ALARM_EVENT;
+  EXTI->RTSR |= RTC_EXTI_LINE_ALARM_EVENT;
+
+
   /* USER CODE END RTC_Init 2 */
 
 }
