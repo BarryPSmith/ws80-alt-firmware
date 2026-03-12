@@ -27,6 +27,8 @@ void Test()
             wait_for_continue();
         }
 
+        processRadio();
+
         delay_stopped(100);
     }
 }

@@ -46,6 +46,7 @@ Src/test.c \
 Src/debug.c \
 Src/radio/radio.c \
 Src/radio/radio_data.c \
+Src/radio/radio_intermediate.c \
 Src/usb_device.c \
 Src/usbd_conf.c \
 Src/usbd_desc.c \

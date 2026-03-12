@@ -8,7 +8,7 @@ extern "C" {
 #include "stm32l1xx_hal.h"
 
 #define xdata
-#define data
+//#define data
 #define code const
 
 #define NOP() __NOP()

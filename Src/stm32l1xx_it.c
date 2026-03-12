@@ -263,6 +263,7 @@ void TIM9_IRQHandler(void)
 }
 #endif
 
+#if 0
 /**
   * @brief This function handles EXTI line[15:10] interrupts.
   */
@@ -280,7 +281,6 @@ void EXTI15_10_IRQHandler(void)
 /**
   * @brief This function handles RTC alarms A and B interrupt through EXTI line 17.
   */
- #if 0
 void RTC_Alarm_IRQHandler(void)
 {
   /* USER CODE BEGIN RTC_Alarm_IRQn 0 */

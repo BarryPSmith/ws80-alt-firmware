@@ -10,8 +10,18 @@
 #include "my_time.h"
 #include "radio.h"
 #include "cmt2300a.h"
+#include "debug.h"
+#include "main.h"
+
+#define RADIO_PRINT(...) do { debug_print(__VA_ARGS__); } while (0)
+
+uint8_t g_frequencySelector;
+volatile bool s_txDone;
 
 void radio_configure_payload(void);
+void radio_prepare_tx(void);
+void radio_TX_DONE_CLR(void);
+void radio_undocumented_CUS_CMT4_TX8_9(uint8_t idx);
 
 void configure_radio(bool first_init,uint16_t frequency_selector)
 {
@@ -90,6 +100,72 @@ void radio_configure_payload(void)
   CMT2300A_SetPayloadLength(0x12);
   CMT2300A_GoSleep();
 }
+
+void radio_transmit(void* data, uint8_t len)
+{
+    radio_prepare_tx();
+    radio_undocumented_CUS_CMT4_TX8_9(25);
+    s_txDone = false;
+    CMT2300A_GoTx();
+    CMT2300A_WriteFifo(data, len);
+    uint32_t entryMillis = millis32();
+    const uint32_t timeout = 32;
+    while (!s_txDone)
+    {
+        if (millis32() - entryMillis > timeout)
+        {
+            RADIO_PRINT("Radio TX TIMEOUT!");
+            break;
+        }
+        stop_until_event(true);
+    }
+    if (s_txDone)
+    {
+        radio_TX_DONE_CLR();
+        CMT2300A_GoSleep();
+    }
+    else
+        configure_radio(false, g_frequencySelector);
+    RADIO_PRINT("Radio Tx Done");
+}
+
+void EXTI15_10_IRQHandler(void)
+{
+  s_txDone = true;
+  __HAL_GPIO_EXTI_CLEAR_IT(radio_int_Pin);
+}
+
+void radio_prepare_tx(void)
+{
+  CMT2300A_GoStby();
+  CMT2300A_EnableWriteFifo();
+  CMT2300A_ClearTxFifo();
+                    /* Int1 = 7: CMT2300A_INT_SEL_PKT_OK
+                       Int2 = 10: CMT2300A_INT_SEL_TX_DONE */
+  CMT2300A_ConfigInterrupt(7,10);
+  radio_TX_DONE_CLR();
+  return;
+}
+
+void radio_TX_DONE_CLR(void)
+{
+  CMT2300A_WriteReg(0x6a,4);
+  return;
+}
+
+void radio_undocumented_CUS_CMT4_TX8_9(uint8_t idx)
+{
+  if (idx < 27) {
+    CMT2300A_WriteReg(3,28);
+  }
+  else {
+    CMT2300A_WriteReg(3,29);
+  }
+  CMT2300A_WriteReg(0x5c,radio_CUS_TX8_9_Values[idx * 2]);
+  CMT2300A_WriteReg(0x5d,radio_CUS_TX8_9_Values[idx * 2 + 1]);
+  return;
+}
+
 
 #if 0
 void radio_soft_reset(void)
