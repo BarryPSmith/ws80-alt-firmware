@@ -280,3 +280,11 @@ void RTC_Alarm_IRQHandler(void)
     RTC->WPR = 0x53U;
     RTC->CR &= ~(RTC_CR_ALRAE);
 }
+
+void delayMicros(uint16_t amt)
+{
+    uint32_t entrySystick = SysTick->VAL;
+    if (entrySystick < amt)
+        entrySystick += SysTick->LOAD;
+    while (entrySystick - SysTick->VAL < amt){}
+}

@@ -3,9 +3,11 @@
 #include "my_time.h"
 #include "temperature.h"
 #include "wind.h"
+#include "radio.h"
 
 void Test()
 {
+    configure_radio(true, 3);
     //g_canStop = false;
     while (1)
     {

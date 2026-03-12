@@ -17,6 +17,7 @@ void wait_until_alarm_stopped();
 void delay_stopped(uint16_t delay);
 void stop_until_event(bool returnToHSE);
 void printMillisStatus();
+void delayMicros(uint16_t amt);
 
 extern uint32_t g_rtcTicks;
 extern volatile bool g_canStop;

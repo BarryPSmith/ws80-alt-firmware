@@ -44,12 +44,18 @@ Src/wind/scope.c \
 Src/wind/wind_calc.c \
 Src/test.c \
 Src/debug.c \
+Src/radio/radio.c \
+Src/radio/radio_data.c \
 Src/usb_device.c \
 Src/usbd_conf.c \
 Src/usbd_desc.c \
 Src/usbd_cdc_if.c \
 Src/stm32l1xx_it.c \
 Src/stm32l1xx_hal_msp.c \
+Drivers/CMT2300a/cmt2300a.c \
+Drivers/CMT2300a/cmt2300a_hal.c \
+Drivers/CMT2300a/cmt_spi3.c \
+Drivers/CMT2300a/common.c \
 Drivers/STM32L1xx_HAL_Driver/Src/stm32l1xx_hal_pcd.c \
 Drivers/STM32L1xx_HAL_Driver/Src/stm32l1xx_hal_pcd_ex.c \
 Drivers/STM32L1xx_HAL_Driver/Src/stm32l1xx_ll_usb.c \
@@ -143,6 +149,8 @@ AS_INCLUDES =
 C_INCLUDES =  \
 -IInc \
 -IInc/wind \
+-IInc/radio \
+-IDrivers/CMT2300a \
 -IDrivers/STM32L1xx_HAL_Driver/Inc \
 -IDrivers/STM32L1xx_HAL_Driver/Inc/Legacy \
 -IMiddlewares/ST/STM32_USB_Device_Library/Core/Inc \
