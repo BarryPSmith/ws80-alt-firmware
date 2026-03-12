@@ -7,11 +7,15 @@ void InitScope();
 void print_wind_phys_debug();
 void adjustRingCounts();
 
+#define DELAYED_ADC
+#ifdef DELAYED_ADC
 #define SCOPE_BUFFER_SIZE 256
+#else
+#define SCOPE_BUFFER_SIZE 980
+#endif
 #define CAPTURE_COUNT 20
 #define TRANSDUCER_FREQ 40000
 #define ADC_START_DELAY 205
-#define DELAYED_ADC
 
 // Have to be careful with this. Buffer must be aligned for DMA to work;
 // But we want it to work over network - so packing would be ideal.

@@ -25,7 +25,7 @@ uint8_t scopeInChannel = 0;
 uint8_t scopeOutChannel = 0;
 
 uint8_t tim9Ticks;
-volatile uint32_t *toggleODR, *toggleBSSR;
+volatile uint32_t *toggleODR;
 GPIO_TypeDef* toggleGpio;
 uint32_t togglePin1, togglePin2;
 uint32_t togglePins;
@@ -142,9 +142,6 @@ static void InitGPIO()
             GPIO_MODER_MODER3_Msk | GPIO_MODER_MODER5_Msk );
 
     // We probably want our drive pins 'Fast'
-
-    // Set A4 LOW to power on analog circuitry
-    GPIOA->BSRR = 1 << (4 + 16);
 }
 
 static void InitTimers()
@@ -249,7 +246,7 @@ void ProcessScope(uint8_t channel, uint8_t direction)
             }
             else if (currentTicks - lastScopeTicks > scopeSampleInterval)
             {
-                WIND_PRINT("SCOPE TIMEOUT ");
+                WIND_PRINT("SCOPE TIMEOUT\r\n");
                 #ifdef DEBUG_SCOPE
                 CDC_Transmit_FS((uint8_t*)buffer, sizeof(buffer));
                 HAL_Delay(1);
@@ -330,6 +327,14 @@ static void UpdateScopeInputChannel()
 
 static void BeginScopeSample()
 {
+    // Set A4 LOW to power on analog circuitry
+    // CHECK: Do we need to wait after this?
+    GPIOA->BSRR = 1 << (4 + 16);
+    delay_stopped(2);
+    // Ensure our analog reference is ready (in case it was turned off during sleep)
+    //uint32_t entryTicks = HAL_GetTick();
+    while ((PWR->CSR & PWR_CSR_VREFINTRDYF) == 0) {}
+    //WIND_PRINT("Wait for PWR_CSR_VREFINTRDYF: %ld\r\n", HAL_GetTick() - entryTicks);
 
     // Reset counters,
     // Set the update bit to ensure any changes have been copied to shadow registers (?)
@@ -375,8 +380,8 @@ static void EndScopeSample()
 {
     // Turn off the ADC   
     ADC1->CR2 &= ~ADC_CR2_ADON;
-    // Disable timer 2
-    // TIM2->CR1 &= ~TIM_CR1_CEN;
+    // Turn off the Op amps and mux:
+    GPIOA->BSRR = 1 << (4);
 }
 
 static void SendScopeSampleBinary()

@@ -65,7 +65,7 @@ void sample_wind()
             measureWind();
             doneMeasureWind();*/
             processWindWaveform(chan, dir);
-            delay_stopped(8);
+            delay_stopped(3);
         }
     }
     //updatePhysicalParamters();
